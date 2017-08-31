@@ -66,10 +66,10 @@ final public class KeyboardNotification: NSObject {
     /// delegae will start receiving keyboardChanging(startFrame: CGRect, keyboardFrame: CGRect, state: KeyboardState) calls
     public func startNotifications() {
         NotificationCenter.default.addObserver(self, selector: #selector(self.keyboardWillChangeFrameNotification(notification:)), name: Notification.Name.UIKeyboardWillChangeFrame, object: nil)
-//        NotificationCenter.default.addObserver(self, selector: #selector(self.keyboardWillHideNotification(notifcation:)), name: Notification.Name.UIKeyboardWillHide, object: nil)
-//        NotificationCenter.default.addObserver(self, selector: #selector(self.keyboardDidHideNotification(notification:)), name: Notification.Name.UIKeyboardDidHide, object: nil)
-//        NotificationCenter.default.addObserver(self, selector: #selector(self.keyboardWillShowNotification(notifcation:)), name: Notification.Name.UIKeyboardWillShow, object: nil)
-//        NotificationCenter.default.addObserver(self, selector: #selector(self.keyboardDidShowNotification(notifcation:)), name: Notification.Name.UIKeyboardDidShow, object: nil)
+        //        NotificationCenter.default.addObserver(self, selector: #selector(self.keyboardWillHideNotification(notifcation:)), name: Notification.Name.UIKeyboardWillHide, object: nil)
+        NotificationCenter.default.addObserver(self, selector: #selector(self.keyboardDidHideNotification(notification:)), name: Notification.Name.UIKeyboardDidHide, object: nil)
+        //        NotificationCenter.default.addObserver(self, selector: #selector(self.keyboardWillShowNotification(notifcation:)), name: Notification.Name.UIKeyboardWillShow, object: nil)
+        //        NotificationCenter.default.addObserver(self, selector: #selector(self.keyboardDidShowNotification(notifcation:)), name: Notification.Name.UIKeyboardDidShow, object: nil)
     }
 
     /// delegate should stop receiving calls
@@ -77,18 +77,26 @@ final public class KeyboardNotification: NSObject {
         NotificationCenter.default.removeObserver(self)
     }
 
-//    @objc private func keyboardWillShowNotification(notifcation: Notification) {
-//    }
-//
-//    @objc private func keyboardDidShowNotification(notifcation: Notification) {
-//    }
-//
-//    @objc private func keyboardWillHideNotification(notifcation: Notification) {
-//        keyboardState = .hidden
-//    }
-//
-//    @objc private func keyboardDidHideNotification(notification: Notification) {
-//    }
+    //    @objc private func keyboardWillShowNotification(notifcation: Notification) {
+    //    }
+    //
+    //    @objc private func keyboardDidShowNotification(notifcation: Notification) {
+    //    }
+    //
+    //    @objc private func keyboardWillHideNotification(notifcation: Notification) {
+    //        keyboardState = .hidden
+    //    }
+    //
+
+
+    @objc private func keyboardDidHideNotification(notification: Notification) {
+        guard let userInfo = notification.userInfo, let startFrame = (userInfo[UIKeyboardFrameBeginUserInfoKey] as? NSValue)?.cgRectValue, let endFrame = (userInfo[UIKeyboardFrameEndUserInfoKey] as? NSValue)?.cgRectValue else {
+            return
+        }
+        firstShowHappened = false
+        keyboardState = .hidden
+        delegate?.keyboardChanging(state: .hidden, transition: .showToHide, startFrame: startFrame, endFrame: endFrame)
+    }
 
     @objc private func keyboardWillChangeFrameNotification(notification: Notification) {
 
@@ -110,12 +118,8 @@ final public class KeyboardNotification: NSObject {
         } else if startFrame.height > 0.0 && endFrame.height > 0.0 && endFrame.height < startFrame.height {
             // keyboard already shown and getting shorter
             keyboardShowing(transition: .showToShowSmaller, startFrame: startFrame, endFrame: endFrame)
-        } else if startFrame.height > 0.0 && endFrame.height == 0.0 {
-            // keyboard hiding
-            keyboardState = .hidden
-            firstShowHappened = false
-            delegate?.keyboardChanging(state: keyboardState, transition: .showToHide, startFrame: startFrame, endFrame: endFrame)
         }
+        // note: sometimes hiding keyboard just moves origin offscreen so need to use keyboardDidHideNotification instead of checking for it here
     }
 
     private func keyboardShowing(transition: KeyboardTransition, startFrame: CGRect, endFrame: CGRect) {
