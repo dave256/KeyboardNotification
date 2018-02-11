@@ -23,15 +23,13 @@ public enum KeyboardState {
 
 public protocol KeyboardNotificationProtocol: class {
 
-    /// called when UIKeyboardWillChangeFrame notification is received
-    ///
-    /// note: may be called with .hiding and then .showing and also possibly .changing during orientation rotation that moves keyboard
+    /// called when keyboard changes on screen
     ///
     /// - Parameters:
-    ///   - startFrame: frame of keyboard before this change
-    ///   - keyboardFrame: frame of keyboard after it will change
-    ///   - state: one of .showing .hiding, .changing, or .nochange
-
+    ///   - state: KeyboardState enum
+    ///   - transition: KeyboardTransition enum
+    ///   - startFrame: startFrame for keyboard
+    ///   - endFrame: endFrame for keyboard
     func keyboardChanging(state: KeyboardState, transition: KeyboardTransition, startFrame: CGRect, endFrame: CGRect)
 }
 
@@ -63,7 +61,7 @@ final public class KeyboardNotification: NSObject {
         stopNotifications()
     }
 
-    /// delegae will start receiving keyboardChanging(startFrame: CGRect, keyboardFrame: CGRect, state: KeyboardState) calls
+    /// delegate will start receiving keyboardChanging(startFrame: CGRect, keyboardFrame: CGRect, state: KeyboardState) calls
     public func startNotifications() {
         NotificationCenter.default.addObserver(self, selector: #selector(self.keyboardWillChangeFrameNotification(notification:)), name: Notification.Name.UIKeyboardWillChangeFrame, object: nil)
         //        NotificationCenter.default.addObserver(self, selector: #selector(self.keyboardWillHideNotification(notifcation:)), name: Notification.Name.UIKeyboardWillHide, object: nil)
@@ -141,3 +139,79 @@ final public class KeyboardNotification: NSObject {
     private weak var timer: Timer? = nil
     private var firstShowHappened = false
 }
+
+class KeyboardNotificationViewController: UIViewController, KeyboardNotificationProtocol, UITextFieldDelegate {
+
+    override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
+        kbn = KeyboardNotification(delegate: self)
+        kbn.startNotifications()
+    }
+
+    override func viewDidDisappear(_ animated: Bool) {
+        super.viewDidDisappear(animated)
+        kbn.stopNotifications()
+    }
+
+    func textFieldShouldReturn(_ textField: UITextField) -> Bool {
+        // resign responder and return true so Return/Enter key on keyboard hides keyboard
+        textField.resignFirstResponder()
+        return true
+    }
+
+    func textFieldDidBeginEditing(_ textField: UITextField) {
+        // keep track of which textfield we are editing so we can use it in keyboardWillChangeFrameNotification
+        currentField = textField
+    }
+
+    func textFieldDidEndEditing(_ textField: UITextField) {
+        // not editing a textfield
+        currentField = nil
+    }
+
+    func keyboardChanging(state: KeyboardState, transition: KeyboardTransition, startFrame: CGRect, endFrame: CGRect) {
+        if let field = currentField {
+            let fieldFrame = field.frame
+            // adjusted (based on current viewOffset) bottom of field + 25 to leave some space above the keyboard
+            let fieldBottom = fieldFrame.origin.y + fieldFrame.height + 25 - viewOffset
+
+            if state == .hidden {
+                if view.frame.origin.y < 0.0 {
+                    UIView.animate(withDuration: 0.25, animations: { [unowned self] in
+                        self.view.frame.origin.y = 0
+                    })
+                    viewOffset = 0.0
+                }
+            } else if fieldBottom > endFrame.origin.y {
+                // if keyboard hides frame, move view up
+                let offset = fieldBottom - endFrame.origin.y
+                viewOffset += offset
+                UIView.animate(withDuration: 0.25, animations: { [unowned self] in
+                    self.view.frame.origin.y -= offset
+                })
+            } else if viewOffset > 0 {
+                // if we've already moved view up and this textfield is far enough above, move view down
+                if fieldBottom + 30 < endFrame.origin.y  {
+                    let offset = min(40, viewOffset)
+                    viewOffset -= offset
+                    UIView.animate(withDuration: 0.25, animations: { [unowned self] in
+                        self.view.frame.origin.y += offset
+                    })
+                }
+            }
+        } else {
+            // not editing any textfield so move back to original location
+            if view.frame.origin.y < 0.0 {
+                UIView.animate(withDuration: 0.25, animations: { [unowned self] in
+                    self.view.frame.origin.y = 0
+                })
+                viewOffset = 0.0
+            }
+        }
+    }
+
+    var kbn: KeyboardNotification!
+    var currentField: UITextField? = nil
+    private var viewOffset: CGFloat = 0.0
+}
+
